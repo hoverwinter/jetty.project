@@ -80,7 +80,7 @@ public class Generator
      */
     public Generator(ByteBufferPool bufferPool)
     {
-        this(bufferPool, false);
+        this(bufferPool, true);
     }
 
     /**
@@ -235,6 +235,42 @@ public class Generator
                 buf.put(frame.getPayload());
             }
         }
+    }
+
+    public void putPayload(ByteBuffer buffer, Frame frame)
+    {
+        ByteBuffer payload = readOnly ? frame.getPayload().slice() : frame.getPayload();
+        if (!frame.isMasked())
+        {
+            buffer.put(payload);
+        }
+        else
+        {
+            // TODO: Is it more efficient to use the int method from generateHeaderBytes?
+            int len = payload.remaining();
+            for (int i = 0; i < len; i++)
+            {
+                buffer.put((byte)(payload.get() ^ mask[i % 4]));
+            }
+        }
+    }
+
+    public ByteBuffer generatePayload(Frame frame)
+    {
+        ByteBuffer payload = readOnly ? frame.getPayload().slice() : frame.getPayload();
+        if (!frame.isMasked())
+            return payload;
+
+        ByteBuffer maskedPayload = bufferPool.acquire(frame.getPayloadLength(), false);
+        BufferUtil.clearToFill(maskedPayload);
+        putPayload(maskedPayload, frame);
+        BufferUtil.flipToFlush(maskedPayload, 0);
+        return maskedPayload;
+    }
+
+    public boolean isReadOnly()
+    {
+        return readOnly;
     }
 
     public ByteBufferPool getBufferPool()
